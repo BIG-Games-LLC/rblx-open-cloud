@@ -132,7 +132,7 @@ class Experience():
         """
         return MemoryStoreQueue(name, self, self.__api_key)
     
-    def flush_memory_store(self, wait=False):
+    def flush_memory_store(self, wait: bool=False):
         """
         Flushes all memory store sorted map and queue data.
 
