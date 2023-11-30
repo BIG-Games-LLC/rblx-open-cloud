@@ -1,8 +1,8 @@
 from typing import Literal
 import requests
 
-VERSION: str = "1.6.0"
-VERSION_INFO: Literal['alpha', 'beta', 'final'] = "final"
+VERSION: str = "1.7.0"
+VERSION_INFO: Literal['alpha', 'beta', 'final'] = "alpha"
 
 user_agent: str = f"rblx-open-cloud/{VERSION} (https://github.com/treeben77/rblx-open-cloud)"
 
@@ -18,3 +18,4 @@ from .oauth2 import *
 from .group import *
 from .creator import *
 from .webhook import *
+from .memorystore import *

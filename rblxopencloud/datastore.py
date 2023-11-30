@@ -7,9 +7,6 @@ from . import user_agent, request_session
 if TYPE_CHECKING:
     from .experience import Experience
 
-if TYPE_CHECKING:
-    from .experience import Experience
-
 __all__ = (
     "EntryInfo",
     "EntryVersion",

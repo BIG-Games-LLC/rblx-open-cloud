@@ -2,6 +2,7 @@ from .exceptions import rblx_opencloudException, InvalidKey, NotFound, RateLimit
 import io
 from typing import Optional, Iterable, Literal, Union
 from .datastore import DataStore, OrderedDataStore
+from .memorystore import SortedMap, MemoryStoreQueue
 from . import user_agent, request_session
 
 __all__ = (
@@ -107,6 +108,56 @@ class Experience():
             nextcursor = data.get("nextPageCursor")
             if not nextcursor: break
     
+    def get_sorted_map(self, name: str) -> SortedMap:
+        """
+        Creates a [`rblxopencloud.SortedMap`][rblxopencloud.SortedMap] with the provided name. This function doesn't make an API call so there is no validation.
+
+        Args:
+            name: The memory store sorted map name.
+        
+        Returns:
+            The sorted map with the provided name.
+        """
+        return SortedMap(name, self, self.__api_key)
+    
+    def get_memory_store_queue(self, name: str) -> MemoryStoreQueue:
+        """
+        Creates a [`rblxopencloud.MemoryStoreQueue`][rblxopencloud.MemoryStoreQueue] with the provided name. This function doesn't make an API call so there is no validation.
+
+        Args:
+            name: The memory store queue name.
+        
+        Returns:
+            The queue with the provided name.
+        """
+        return MemoryStoreQueue(name, self, self.__api_key)
+    
+    def flush_memory_store(self, wait=False):
+        """
+        Flushes all memory store sorted map and queue data.
+
+        Args:
+            wait: Wether to wait until the flush is complete. This could take a really long time and is not advised to be used.
+        """
+        response = request_session.post(f"https://apis.roblox.com/cloud/v2/universes/{self.id}/memory-store:flush",
+            headers={"x-api-key" if not self.__api_key.startswith("Bearer ") else "authorization": self.__api_key, "user-agent": user_agent})
+        
+        if response.status_code == 401: raise InvalidKey("Your key may have expired, or may not have permission to access this resource.")
+        elif response.status_code == 404: raise NotFound(f"The place does not exist.")
+        elif response.status_code == 429: raise RateLimited("You're being rate limited.")
+        elif response.status_code >= 500: raise ServiceUnavailable("The service is unavailable or has encountered an error.")
+        elif not response.ok: raise rblx_opencloudException(f"Unexpected HTTP {response.status_code}") 
+        if not wait: return
+        
+        operation_id = response.json()["path"].split("/")[-1]
+
+        while True:
+            response = request_session.get(f"https://apis.roblox.com/cloud/v2/universes/{self.id}/memory-store/operations/{operation_id}",
+                headers={"x-api-key" if not self.__api_key.startswith("Bearer ") else "authorization": self.__api_key, "user-agent": user_agent})
+            if response.ok and response.json().get("done") == True: return
+            elif not response.ok:
+                raise rblx_opencloudException(f"Unexpected HTTP {response.status_code}") 
+
     def publish_message(self, topic: str, data: str) -> None:
         """
         Publishes a message to live game servers that can be recieved with [MessagingService](https://create.roblox.com/docs/reference/engine/classes/MessagingService).
