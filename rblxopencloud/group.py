@@ -347,7 +347,7 @@ class Group(Creator):
             nextcursor = data.get("nextPageToken")
             if not nextcursor: break
 
-    def list_join_requests(self, limit: Optional[int]=None, user_id: Optional[int] = None) -> Iterable["GroupMember"]:
+    def list_join_requests(self, limit: Optional[int]=None, user_id: Optional[int] = None) -> Iterable["GroupJoinRequest"]:
         """
         Interates [`rblxopencloud.GroupJoinRequest`][rblxopencloud.GroupJoinRequest] for each user requesting to join the group.
         
