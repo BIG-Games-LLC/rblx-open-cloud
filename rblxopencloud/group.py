@@ -355,7 +355,6 @@ class Group(Creator):
         
         Args:
             limit: The maximum number of members to iterate. This can be `None` to return all members.
-            role_id: If present, the api will only provide members with this role.
             user_id: If present, the api will only provide the member with this user ID.
         
         Returns:
@@ -475,6 +474,9 @@ class Group(Creator):
         Accepts the join request for the provided user.
         
         **The `group:write` scope is required for OAuth2 authorization.**
+
+        Args:
+            user_id: The user ID to accept the join request for. Must have requested to join.
         
         Raises:
             InvalidKey: The API key isn't valid, doesn't have access to read public group info, or is from an invalid IP address.
@@ -501,6 +503,9 @@ class Group(Creator):
         Declines the join request for the provided user.
         
         **The `group:write` scope is required for OAuth2 authorization.**
+
+        Args:
+            user_id: The user ID to decline the join request for. Must have requested to join.
         
         Raises:
             InvalidKey: The API key isn't valid, doesn't have access to read public group info, or is from an invalid IP address.
