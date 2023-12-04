@@ -8,6 +8,7 @@ from .user import User
 __all__ = (
     "Group",
     "GroupMember",
+    "GroupJoinRequest",
     "GroupRole",
     "GroupRolePermissions",
     "GroupShout"
