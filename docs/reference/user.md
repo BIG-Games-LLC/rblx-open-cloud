@@ -4,6 +4,10 @@
     options:
         merge_init_into_class: true
 
+::: rblxopencloud.UserSocialLinks
+
+::: rblxopencloud.UserVisibility
+
 ::: rblxopencloud.InventoryItem
 
 ::: rblxopencloud.InventoryAsset

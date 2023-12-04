@@ -12,6 +12,8 @@ if TYPE_CHECKING:
 
 __all__ = (
     "User",
+    "UserSocialLinks",
+    "UserVisibility"
     "InventoryAssetType",
     "InventoryItemState",
     "InventoryItem",
@@ -386,6 +388,7 @@ class User(Creator):
         locale (Optionl[str]): The user's locale as an [IETF language code](https://en.wikipedia.org/wiki/IETF_language_tag#List_of_common_primary_language_subtags), only avalible from [`User.fetch_info`][rblxopencloud.User.fetch_info].
         premium (Optionl[bool]): Wether the user is subscribed to premium, only avalible from [`User.fetch_info`][rblxopencloud.User.fetch_info] - will always be `False` without the `user.advanced:read` OAuth2 scope.
         verified (Optionl[bool]): Wether the user is verified, only avalible from [`User.fetch_info`][rblxopencloud.User.fetch_info] - will always be `False` without the `user.advanced:read` OAuth2 scope.
+        social_links (Optional[UserSocialLinks]): The user's profile social links, only avalible from [`User.fetch_info`][rblxopencloud.User.fetch_info] with the `user.social:read` scope.
     """
 
     def __init__(self, id: int, api_key: str) -> None:
