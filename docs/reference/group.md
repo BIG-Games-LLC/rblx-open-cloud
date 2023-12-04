@@ -8,6 +8,10 @@
     options:
         inherited_members: false
 
+::: rblxopencloud.GroupJoinRequest
+    options:
+        inherited_members: false
+
 ::: rblxopencloud.GroupRole
 
 ::: rblxopencloud.GroupRolePermissions

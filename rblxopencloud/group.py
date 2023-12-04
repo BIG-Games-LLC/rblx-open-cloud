@@ -144,6 +144,64 @@ class GroupMember(User):
     def __repr__(self) -> str:
         return f"rblxopencloud.GroupMember(id={self.id}, group={self.group})"
 
+class GroupJoinRequest(User):
+    """
+    Represents a user requesting to join a group.
+
+    !!! warning
+        This class isn't designed to be created by users. It is returned by [`Group.list_join_requests()`][rblxopencloud.Group.list_join_requests].
+
+    Attributes:
+        id (int): The user's ID.
+        group (Group): The group this object is related to.
+        requested_at (datetime.datetime): The time when the user requested to join the Group.
+    
+    !!! note
+        This class bases [`rblxopencloud.User`][rblxopencloud.User], so all methods of it can be used from this object, such as [`User.list_inventory()`][rblxopencloud.User.list_inventory]. They aren't documented here to save space.
+    """
+
+    def __init__(self, member, api_key, group=None) -> None:
+        self.id: int = int(member["user"].split("/")[1])
+        self.group: Group = group
+        self.requested_at: datetime.datetime = datetime.datetime.fromisoformat((member["createTime"].split("Z")[0]+("" if "." in member["createTime"] else ".")+"0"*6)[0:26])
+
+        super().__init__(self.id, api_key)
+
+    def __repr__(self) -> str:
+        return f"rblxopencloud.GroupJoinRequest(id={self.id}, group={self.group})"
+
+    def accept(self):
+        """
+        Accepts the join request for this user. Shortcut for [`Group.accept_join_request`][rblxopencloud.Group.accept_join_request].
+
+        **The `group:write` scope is required for OAuth2 authorization.**
+        
+        Raises:
+            InvalidKey: The API key isn't valid, doesn't have access to read public group info, or is from an invalid IP address.
+            PermissionDenied: The user does not have the proper permissions to Accept Join Requests.
+            NotFound: The group does not exist.
+            RateLimited: You've exceeded the rate limits.
+            ServiceUnavailable: The Roblox servers ran into an error, or are unavailable right now.
+            rblx_opencloudException: Roblox returned an unexpected error.
+        """
+        return self.group.accept_join_request(self.id)
+
+    def decline(self):
+        """
+        Declines the join request for this user. Shortcut for [`Group.decline_join_request`][rblxopencloud.Group.decline_join_request].
+
+        **The `group:write` scope is required for OAuth2 authorization.**
+        
+        Raises:
+            InvalidKey: The API key isn't valid, doesn't have access to read public group info, or is from an invalid IP address.
+            PermissionDenied: The user does not have the proper permissions to Accept Join Requests.
+            NotFound: The group does not exist.
+            RateLimited: You've exceeded the rate limits.
+            ServiceUnavailable: The Roblox servers ran into an error, or are unavailable right now.
+            rblx_opencloudException: Roblox returned an unexpected error.
+        """
+        return self.group.decline_join_request(self.id)
+
 class Group(Creator):
     """
     Represents a group on Roblox. It can be used for both uploading assets, and accessing group information.
@@ -287,6 +345,55 @@ class Group(Creator):
                 yield GroupMember(member, self.__api_key)
             nextcursor = data.get("nextPageToken")
             if not nextcursor: break
+
+    def list_join_requests(self, limit: Optional[int]=None, user_id: Optional[int] = None) -> Iterable["GroupMember"]:
+        """
+        Interates [`rblxopencloud.GroupJoinRequest`][rblxopencloud.GroupJoinRequest] for each user requesting to join the group.
+        
+        **The `group:read` scope is required for OAuth2 authorization.**
+        
+        Args:
+            limit: The maximum number of members to iterate. This can be `None` to return all members.
+            role_id: If present, the api will only provide members with this role.
+            user_id: If present, the api will only provide the member with this user ID.
+        
+        Returns:
+            An iterable of [`rblxopencloud.GroupJoinRequest`][rblxopencloud.GroupJoinRequest] for each user who has requested to join.
+
+        Raises:
+            InvalidKey: The API key isn't valid, doesn't have access to write group info, or is from an invalid IP address.
+            NotFound: The group does not exist.
+            RateLimited: You've exceeded the rate limits.
+            ServiceUnavailable: The Roblox servers ran into an error, or are unavailable right now.
+            rblx_opencloudException: Roblox returned an unexpected error.
+        """
+
+        filter = None
+
+        nextcursor = ""
+        yields = 0
+        while limit == None or yields < limit:
+            response = request_session.get(f"https://apis.roblox.com/cloud/v2/groups/{self.id}/join-requests",
+                headers={"x-api-key" if not self.__api_key.startswith("Bearer ") else "authorization": self.__api_key, "user-agent": user_agent}, params={
+                "maxPageSize": limit if limit and limit <= 100 else 100,
+                "filter": f"user == 'users/{user_id}'" if user_id else None,
+                "pageToken": nextcursor if nextcursor else None
+            })
+
+            if response.status_code == 400: raise rblx_opencloudException(response.json()["message"])
+            elif response.status_code == 401: raise InvalidKey(response.text)
+            elif response.status_code == 404: raise NotFound(response.json()["message"])
+            elif response.status_code == 429: raise RateLimited("You're being rate limited!")
+            elif response.status_code >= 500: raise ServiceUnavailable(f"Internal Server Error: '{response.text}'")
+            elif not response.ok: raise rblx_opencloudException(f"Unexpected HTTP {response.status_code}: '{response.text}'")
+            
+            data = response.json()
+            for request in data["groupJoinRequests"]:
+                yields += 1
+                
+                yield GroupJoinRequest(request, self.__api_key)
+            nextcursor = data.get("nextPageToken")
+            if not nextcursor: break
     
     def list_roles(self, limit: Optional[int]=None) -> Iterable[GroupRole]:
         """
@@ -361,3 +468,55 @@ class Group(Creator):
         elif not response.ok: raise rblx_opencloudException(f"Unexpected HTTP {response.status_code}: '{response.text}'")
         
         return GroupShout(response.json(), self.__api_key)
+
+    def accept_join_request(self, user_id: int = None):
+        """
+        Accepts the join request for the provided user.
+        
+        **The `group:write` scope is required for OAuth2 authorization.**
+        
+        Raises:
+            InvalidKey: The API key isn't valid, doesn't have access to read public group info, or is from an invalid IP address.
+            PermissionDenied: The user does not have the proper permissions to Accept Join Requests.
+            NotFound: The group does not exist.
+            RateLimited: You've exceeded the rate limits.
+            ServiceUnavailable: The Roblox servers ran into an error, or are unavailable right now.
+            rblx_opencloudException: Roblox returned an unexpected error.
+        """
+
+        response = request_session.delete(f"https://apis.roblox.com/cloud/v2/groups/{self.id}/join-requests/{user_id}:accept",
+            headers={"x-api-key" if not self.__api_key.startswith("Bearer ") else "authorization": self.__api_key, "user-agent": user_agent})
+        
+        if response.ok: return None
+        elif response.status_code == 401: raise InvalidKey(response.text)
+        elif response.status_code == 403: raise PermissionDenied(response.json()['message'])
+        elif response.status_code == 404: raise NotFound(response.json()['message'])
+        elif response.status_code == 429: raise RateLimited("You're being rate limited!")
+        elif response.status_code >= 500: raise ServiceUnavailable(f"Internal Server Error: '{response.text}'")
+        else: raise rblx_opencloudException(f"Unexpected HTTP {response.status_code}: '{response.text}'")
+    
+    def decline_join_request(self, user_id: int = None):
+        """
+        Declines the join request for the provided user.
+        
+        **The `group:write` scope is required for OAuth2 authorization.**
+        
+        Raises:
+            InvalidKey: The API key isn't valid, doesn't have access to read public group info, or is from an invalid IP address.
+            PermissionDenied: The user does not have the proper permissions to Accept Join Requests.
+            NotFound: The group does not exist.
+            RateLimited: You've exceeded the rate limits.
+            ServiceUnavailable: The Roblox servers ran into an error, or are unavailable right now.
+            rblx_opencloudException: Roblox returned an unexpected error.
+        """
+
+        response = request_session.delete(f"https://apis.roblox.com/cloud/v2/groups/{self.id}/join-requests/{user_id}:decline",
+            headers={"x-api-key" if not self.__api_key.startswith("Bearer ") else "authorization": self.__api_key, "user-agent": user_agent})
+        
+        if response.ok: return None
+        elif response.status_code == 401: raise InvalidKey(response.text)
+        elif response.status_code == 403: raise PermissionDenied(response.json()['message'])
+        elif response.status_code == 404: raise NotFound(response.json()['message'])
+        elif response.status_code == 429: raise RateLimited("You're being rate limited!")
+        elif response.status_code >= 500: raise ServiceUnavailable(f"Internal Server Error: '{response.text}'")
+        else: raise rblx_opencloudException(f"Unexpected HTTP {response.status_code}: '{response.text}'")
