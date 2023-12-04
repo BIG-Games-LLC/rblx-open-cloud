@@ -309,6 +309,64 @@ class InventoryPrivateServer(InventoryItem):
     def __repr__(self) -> str:
         return f"rblxopencloud.InventoryPrivateServer(id={self.id})"
 
+class UserVisibility(Enum):
+    """
+    Enum denoting what visibility a resource has. Currently only applies to social links.
+
+    Attributes:
+        Unknown (0): The visiblity type is unknown
+        Noone (1): It is visible to no one.
+        Friends (2): It is visible to only the user's friends.
+        Following (3): It is visible to the user's friends and users they follow.
+        Followers (4): It is visible to the user's friends, users they follow, and users that follow them.
+        Everyone (5): It is visible to everyone.
+    """
+    Unknown = 0
+    Noone = 1
+    Friends = 2
+    Following = 3
+    Followers = 4
+    Everyone = 5
+
+user_visiblity_strings = {
+    "NO_ONE": UserVisibility.Noone,
+    "FRIENDS": UserVisibility.Friends,
+    "FRIENDS_AND_FOLLOWING": UserVisibility.Following,
+    "FRIENDS_FOLLOWING_AND_FOLLOWERS": UserVisibility.Followers,
+    "EVERYONE": UserVisibility.Everyone
+}
+
+class UserSocialLinks():
+    """
+    Data class storing information about a user's social links.
+
+    Attributes:
+        facebook_uri (str): Facebook profile URI, empty string if not provided.
+        guilded_uri (str): Guilded profile URI, empty string if not provided.
+        twitch_uri (str): Twitch profile URI, empty string if not provided.
+        twitter_uri (str): Twitter or 'X' profile URI, empty string if not provided.
+        youtube_uri (str): YouTube profile URI, empty string if not provided.
+        visibility (UserVisibility): The visiblity of these social links to user's on the platform.
+    """
+
+    def __repr__(self) -> str:
+        social_links_params = ["facebook_uri", "guilded_uri", "twitch_uri", "twitter_uri", "youtube_uri"]
+        social_links = []
+
+        for param in social_links_params:
+            if self.__getattribute__(param): social_links.append(f"{param}=\"{self.__getattribute__(param)}\"")
+                                                     
+        return f"""rblxopencloud.UserSocialLinks({', '.join(social_links)+
+            (', ' if social_links else '')}visibility={self.visibility})"""
+
+    def __init__(self, data):
+        self.facebook_uri: str = data.get("facebook", "")
+        self.guilded_uri: str = data.get("guilded", "")
+        self.twitch_uri: str = data.get("twitch", "")
+        self.twitter_uri: str = data.get("twitter", "")
+        self.youtube_uri: str = data.get("youtube", "")
+        self.visibility: UserVisibility = user_visiblity_strings.get(data.get("visibility", ""), UserVisibility.Unknown)
+
 class User(Creator):
     """
     Represents a user on Roblox. It is used to provide information about a user in OAuth2, fetch information about a user, and access their resources.
@@ -318,12 +376,16 @@ class User(Creator):
         api_key: The API key created on the [Creator Dashboard](https://create.roblox.com/credentials) with access to the user.
     
     Attributes:
-        id (int): The user's ID. The `openid` scope is required for OAuth2 authorization.
-        username (Optional[str]): The user's username, only avalible from OAuth2 with the `profile` scope.
-        display_name (Optional[str]): The user's display name, only avalible from OAuth2 with the `profile` scope.
-        profile_uri (str): A URL to the user's profile on Roblox. The `openid` scope is required for OAuth2 authorization.
+        id (int): The user's ID.
+        username (Optional[str]): The user's username, only avalible from OAuth2 with the `profile` scope, or when fetched with [`User.fetch_info`][rblxopencloud.User.fetch_info].
+        display_name (Optional[str]): The user's display name, only avalible from OAuth2 with the `profile` scope, or when fetched with [`User.fetch_info`][rblxopencloud.User.fetch_info].
+        profile_uri (str): A URL to the user's profile on Roblox. The `openid` scope is required for OAuth2 authorization, or when fetched with [`User.fetch_info`][rblxopencloud.User.fetch_info].
         headshot_uri (Optional[str]): A URI to Roblox's CDN for the user's avatar headshot, only avalible from OAuth2 with the `profile` scope. Example value: `https://tr.rbxcdn.com/0f00ba3ab40808dbbbf3410a5a637d2e/150/150/AvatarHeadshot/Png`
-        created_at (Optional[datetime.datetime]): The timestamp the user created their account, only avalible from OAuth2 with the `profile` scope.
+        created_at (Optional[datetime.datetime]): The timestamp the user created their account, only avalible from OAuth2 with the `profile` scope, or when fetched with [`User.fetch_info`][rblxopencloud.User.fetch_info].
+        about (Optional[str]): The user's description or about me, only avalible from [`User.fetch_info`][rblxopencloud.User.fetch_info].
+        locale (Optionl[str]): The user's locale as an [IETF language code](https://en.wikipedia.org/wiki/IETF_language_tag#List_of_common_primary_language_subtags), only avalible from [`User.fetch_info`][rblxopencloud.User.fetch_info].
+        premium (Optionl[bool]): Wether the user is subscribed to premium, only avalible from [`User.fetch_info`][rblxopencloud.User.fetch_info] - will always be `False` without the `user.advanced:read` OAuth2 scope.
+        verified (Optionl[bool]): Wether the user is verified, only avalible from [`User.fetch_info`][rblxopencloud.User.fetch_info] - will always be `False` without the `user.advanced:read` OAuth2 scope.
     """
 
     def __init__(self, id: int, api_key: str) -> None:
@@ -333,10 +395,56 @@ class User(Creator):
         self.profile_uri: str = f"https://roblox.com/users/{self.id}/profile"
         self.headshot_uri: Optional[str] = None
         self.created_at: Optional[datetime.datetime] = None
-
+        self.about: Optional[str] = None
+        self.locale: Optional[str] = None
+        self.premium: Optional[bool] = None
+        self.verified: Optional[bool] = None
+        self.social_links: Optional[UserSocialLinks] = None
         self.__api_key = api_key
 
         super().__init__(id, api_key, "User")
+    
+    def __repr__(self) -> str:
+        return f"rblxopencloud.User({self.id})"
+
+    def fetch_info(self) -> "User":
+        """
+        Updates the empty attributes in the class with the user info.
+
+        **Some information requires the `user.social.read` or `user.advanced.read` scopes for OAuth2 authorization.**
+
+        Returns:
+            The class itself.
+
+        Raises:
+            InvalidKey: The API key isn't valid, doesn't have access to read public group info, or is from an invalid IP address.
+            NotFound: The group does not exist.
+            RateLimited: You've exceeded the rate limits.
+            ServiceUnavailable: The Roblox servers ran into an error, or are unavailable right now.
+            rblx_opencloudException: Roblox returned an unexpected error.
+        """
+
+        response = request_session.get(f"https://apis.roblox.com/cloud/v2/users/{self.id}",
+            headers={"x-api-key" if not self.__api_key.startswith("Bearer ") else "authorization": self.__api_key, "user-agent": user_agent})
+        
+        if response.status_code == 401: raise InvalidKey(response.text)
+        elif response.status_code == 404: raise NotFound(response.json()['message'])
+        elif response.status_code == 429: raise RateLimited("You're being rate limited!")
+        elif response.status_code >= 500: raise ServiceUnavailable(f"Internal Server Error: '{response.text}'")
+        elif not response.ok: raise rblx_opencloudException(f"Unexpected HTTP {response.status_code}: '{response.text}'")
+        
+        data = response.json()
+        print(data)
+        self.username = data["name"]
+        self.display_name = data["displayName"]
+        self.created_at = datetime.datetime.fromisoformat((data["createTime"].split("Z")[0]+("." if not "." in data["createTime"] else "")+"0"*6)[0:26])
+        self.about = data["about"]
+        self.locale = data["locale"]
+        self.premium = data.get("premium")
+        self.verified = data.get("verified")
+        self.social_links = UserSocialLinks(data["socialNetworkProfiles"]) if data.get("socialNetworkProfiles") else None
+        
+        return self
 
     def list_groups(self, limit: Optional[int]=None) -> Iterable["GroupMember"]:
         """
@@ -400,9 +508,6 @@ class User(Creator):
 
         pass
     
-    def __repr__(self) -> str:
-        return f"rblxopencloud.User({self.id})"
-
     def list_inventory(self, limit: Optional[int]=None, only_collectibles: Optional[bool]=False, assets: Optional[Union[list[InventoryAssetType], list[int], bool]]=None, badges: Optional[Union[list[int], bool]]=False, game_passes: Optional[Union[list[int], bool]]=False, private_servers: Optional[Union[list[int], bool]]=False) -> Iterable[Union[InventoryAsset, InventoryBadge, InventoryGamePass, InventoryPrivateServer]]:
         """
         Returns an Iterable of [`rblxopencloud.InventoryItem`][rblxopencloud.InventoryItem] for every item in the user's inventory. If `only_collectibles`, `assets`, `badges`, `game_passes`, and `private_servers` are all `False`/`None`, then all inventory items are returned.
