@@ -3,9 +3,9 @@ from .creator import Creator
 from .exceptions import rblx_opencloudException, InvalidKey, NotFound, RateLimited, ServiceUnavailable
 import datetime
 
-from typing import Optional, Iterable, Union, TYPE_CHECKING
+from typing import Optional, Iterable, Union, Literal, TYPE_CHECKING
 from enum import Enum
-from . import user_agent, request_session
+from . import user_agent, request_session, Operation
 
 if TYPE_CHECKING:
     from .group import GroupMember
@@ -447,6 +447,36 @@ class User(Creator):
         self.social_links = UserSocialLinks(data["socialNetworkProfiles"]) if data.get("socialNetworkProfiles") else None
         
         return self
+    
+    def generate_headshot(self, size: Literal[48, 50, 60, 75, 100, 110, 150, 180, 352, 420, 720]) -> Union[str, Operation[str]]:
+        """
+        Fetches the user's thumbnail from Roblox, if thumbnail generation is in progress, it will return an [`rblxopencloud.Operation`][rblxopenCloud.Operation] instead.
+
+        Returns:
+            The headshot URI or an [`rblxopencloud.Operation`][rblxopenCloud.Operation] to get the thumbnail.
+
+        Raises:
+            InvalidKey: The API key isn't valid, doesn't have access to read public user info, or is from an invalid IP address.
+            NotFound: The user does not exist.
+            RateLimited: You've exceeded the rate limits.
+            ServiceUnavailable: The Roblox servers ran into an error, or are unavailable right now.
+            rblx_opencloudException: Roblox returned an unexpected error.
+        """
+
+        response = request_session.get(f"https://apis.roblox.com/cloud/v2/users/{self.id}:generateThumbnail",
+            headers={"x-api-key" if not self.__api_key.startswith("Bearer ") else "authorization": self.__api_key, "user-agent": user_agent})
+        
+        if response.status_code == 401: raise InvalidKey(response.text)
+        elif response.status_code == 404: raise NotFound(response.json()['message'])
+        elif response.status_code == 429: raise RateLimited("You're being rate limited!")
+        elif response.status_code >= 500: raise ServiceUnavailable(f"Internal Server Error: '{response.text}'")
+        elif not response.ok: raise rblx_opencloudException(f"Unexpected HTTP {response.status_code}: '{response.text}'")
+        
+        data = response.json()
+        if data["done"]:
+            return data["response"]["imageUri"]
+
+        return Operation(f"cloud/v2/{data['path']}", self.__api_key, lambda response: response['imageUri'])
 
     def list_groups(self, limit: Optional[int]=None) -> Iterable["GroupMember"]:
         """
