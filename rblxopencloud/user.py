@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 __all__ = (
     "User",
     "UserSocialLinks",
-    "UserVisibility"
+    "UserVisibility",
     "InventoryAssetType",
     "InventoryItemState",
     "InventoryItem",
@@ -387,7 +387,7 @@ class User(Creator):
         about (Optional[str]): The user's description or about me, only avalible from [`User.fetch_info`][rblxopencloud.User.fetch_info].
         locale (Optionl[str]): The user's locale as an [IETF language code](https://en.wikipedia.org/wiki/IETF_language_tag#List_of_common_primary_language_subtags), only avalible from [`User.fetch_info`][rblxopencloud.User.fetch_info].
         premium (Optionl[bool]): Wether the user is subscribed to premium, only avalible from [`User.fetch_info`][rblxopencloud.User.fetch_info] - will always be `False` without the `user.advanced:read` OAuth2 scope.
-        verified (Optionl[bool]): Wether the user is verified, only avalible from [`User.fetch_info`][rblxopencloud.User.fetch_info] - will always be `False` without the `user.advanced:read` OAuth2 scope.
+        id_verified (Optionl[bool]): Wether the user has verified government issued ID, only avalible from [`User.fetch_info`][rblxopencloud.User.fetch_info] - will always be `False` without the `user.advanced:read` OAuth2 scope.
         social_links (Optional[UserSocialLinks]): The user's profile social links, only avalible from [`User.fetch_info`][rblxopencloud.User.fetch_info] with the `user.social:read` scope.
     """
 
@@ -401,7 +401,7 @@ class User(Creator):
         self.about: Optional[str] = None
         self.locale: Optional[str] = None
         self.premium: Optional[bool] = None
-        self.verified: Optional[bool] = None
+        self.id_verified: Optional[bool] = None
         self.social_links: Optional[UserSocialLinks] = None
         self.__api_key = api_key
 
@@ -437,14 +437,13 @@ class User(Creator):
         elif not response.ok: raise rblx_opencloudException(f"Unexpected HTTP {response.status_code}: '{response.text}'")
         
         data = response.json()
-        print(data)
         self.username = data["name"]
         self.display_name = data["displayName"]
         self.created_at = datetime.datetime.fromisoformat((data["createTime"].split("Z")[0]+("." if not "." in data["createTime"] else "")+"0"*6)[0:26])
         self.about = data["about"]
         self.locale = data["locale"]
         self.premium = data.get("premium")
-        self.verified = data.get("verified")
+        self.id_verified = data.get("verified")
         self.social_links = UserSocialLinks(data["socialNetworkProfiles"]) if data.get("socialNetworkProfiles") else None
         
         return self
