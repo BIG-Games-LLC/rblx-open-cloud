@@ -8,7 +8,7 @@ user_agent: str = f"rblx-open-cloud/{VERSION} (https://github.com/treeben77/rblx
 
 request_session: requests.Session = requests.Session()
 
-T = TypeVar("T", )
+T = TypeVar("T")
 
 class Operation(Generic[T]):
     def __init__(self, path: str, api_key: str, return_type: T, **return_meta) -> None:
