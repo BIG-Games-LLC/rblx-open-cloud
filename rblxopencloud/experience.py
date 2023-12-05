@@ -3,7 +3,7 @@ import io
 from typing import Optional, Iterable, Literal, Union
 from .datastore import DataStore, OrderedDataStore
 from .memorystore import SortedMap, MemoryStoreQueue
-from . import user_agent, request_session
+from . import user_agent, request_session, Operation
 
 __all__ = (
     "Experience",
@@ -132,7 +132,7 @@ class Experience():
         """
         return MemoryStoreQueue(name, self, self.__api_key)
     
-    def flush_memory_store(self, wait: bool=False):
+    def flush_memory_store(self) -> Operation[bool]:
         """
         Flushes all memory store sorted map and queue data.
 
@@ -147,16 +147,10 @@ class Experience():
         elif response.status_code == 429: raise RateLimited("You're being rate limited.")
         elif response.status_code >= 500: raise ServiceUnavailable("The service is unavailable or has encountered an error.")
         elif not response.ok: raise rblx_opencloudException(f"Unexpected HTTP {response.status_code}") 
-        if not wait: return
-        
-        operation_id = response.json()["path"].split("/")[-1]
 
-        while True:
-            response = request_session.get(f"https://apis.roblox.com/cloud/v2/universes/{self.id}/memory-store/operations/{operation_id}",
-                headers={"x-api-key" if not self.__api_key.startswith("Bearer ") else "authorization": self.__api_key, "user-agent": user_agent})
-            if response.ok and response.json().get("done") == True: return
-            elif not response.ok:
-                raise rblx_opencloudException(f"Unexpected HTTP {response.status_code}") 
+        op_id = response.json()['path'].split(f"/")[-1]
+
+        return Operation(f"cloud/v2/universes/{self.id}/memory-store/operations/{op_id}", self.__api_key, True)
 
     def publish_message(self, topic: str, data: str) -> None:
         """
