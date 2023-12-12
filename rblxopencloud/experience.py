@@ -1,12 +1,41 @@
 from .exceptions import rblx_opencloudException, InvalidKey, NotFound, RateLimited, ServiceUnavailable
-import io
+import io, datetime
 from typing import Optional, Iterable, Literal, Union
 from .datastore import DataStore, OrderedDataStore
 from . import user_agent, request_session
+from .user import User
+from .group import Group
+from enum import Enum
 
 __all__ = (
     "Experience",
+    "ExperienceAgeRating",
+    "ExperienceSocialLink"
 )
+
+class ExperienceAgeRating(Enum):
+    Unknown = 0
+    Unspecified = 1
+    AllAges = 2
+    NinePlus = 3
+    ThirteenPlus = 4
+    SeventeenPlus = 5
+
+class ExperienceSocialLink():
+    def __init__(self, title: str, uri: str) -> None:
+        self.title = title
+        self.uri = uri
+    
+    def __repr__(self) -> str:
+        return f"rblxopencloud.ExperienceSocialLink(title=\"{self.title}\", uri=\"{self.uri}\")"
+
+exeperience_age_rating_strings = {
+    "AGE_RATING_UNSPECIFIED": ExperienceAgeRating.Unspecified,
+    "AGE_RATING_ALL": ExperienceAgeRating.AllAges,
+    "AGE_RATING_9_PLUS": ExperienceAgeRating.NinePlus,
+    "AGE_RATING_13_PLUS": ExperienceAgeRating.ThirteenPlus,
+    "AGE_RATING_17_PLUS": ExperienceAgeRating.SeventeenPlus,
+}
 
 class Experience():
     """
@@ -23,11 +52,136 @@ class Experience():
 
     def __init__(self, id: int, api_key: str):
         self.id: int = id
-        self.owner = None
         self.__api_key: str = api_key
+
+        self.name: Optional[str] = None
+        self.description: Optional[str] = None
+        self.created_at: Optional[datetime.datetime] = None
+        self.updated_at: Optional[datetime.datetime] = None
+        self.owner: Optional[Union[User, Group]] = None
+        self.public: Optional[bool] = None
+        self.voice_chat_enabled: Optional[bool] = None
+        self.age_rating: Optional[ExperienceAgeRating] = None
+        self.desktop_enabled: Optional[bool] = None
+        self.mobile_enabled: Optional[bool] = None
+        self.tablet_enabled: Optional[bool] = None
+        self.console_enabled: Optional[bool] = None
+        self.vr_enabled: Optional[bool] = None
     
     def __repr__(self) -> str:
         return f"rblxopencloud.Experience({self.id})"
+    
+    def __update_params(self, data):
+        self.name = data["displayName"]
+        self.description = data["description"]
+        self.created_at = datetime.datetime.fromisoformat((data["createTime"].split("Z")[0]+("." if not "." in data["createTime"] else "")+"0"*6)[0:26])
+        self.updated_at = datetime.datetime.fromisoformat((data["updateTime"].split("Z")[0]+("." if not "." in data["updateTime"] else "")+"0"*6)[0:26])
+        if data.get("user"):
+            self.owner = User(int(data["user"].split("/")[1]), self.__api_key)
+        elif data.get("group"):
+            self.owner = Group(int(data["group"].split("/")[1]), self.__api_key)
+        
+        self.public = data["visibility"] == "PUBLIC"
+        self.voice_chat_enabled = data["voiceChatEnabled"]
+        self.age_rating = exeperience_age_rating_strings.get(data["ageRating"], ExperienceAgeRating.Unknown)
+            
+        self.desktop_enabled = data["desktopEnabled"]
+        self.mobile_enabled = data["mobileEnabled"]
+        self.tablet_enabled = data["tabletEnabled"]
+        self.console_enabled = data["consoleEnabled"]
+        self.vr_enabled = data["vrEnabled"]
+    
+    def fetch_info(self) -> "Experience":
+        response = request_session.get(f"https://apis.roblox.com/cloud/v2/universes/{self.id}",
+            headers={"x-api-key" if not self.__api_key.startswith("Bearer ") else "authorization": self.__api_key, "user-agent": user_agent})
+        
+        if response.status_code == 401: raise InvalidKey(response.text)
+        elif response.status_code == 404: raise NotFound(response.json()['message'])
+        elif response.status_code == 429: raise RateLimited("You're being rate limited!")
+        elif response.status_code >= 500: raise ServiceUnavailable(f"Internal Server Error: '{response.text}'")
+        elif not response.ok: raise rblx_opencloudException(f"Unexpected HTTP {response.status_code}: '{response.text}'")
+        
+        data = response.json()
+        print("[DEBUG]", data)
+
+        self.__update_params(data)
+        
+        return self
+    
+    def update(self, voice_chat_enabled: Optional[bool] = None, private_server_robux_price: Optional[Union[int, bool]] = None,
+            desktop_enabled: Optional[bool] = None, mobile_enabled: Optional[bool] = None,
+            tablet_enabled: Optional[bool] = None, console_enabled: Optional[bool] = None,
+            vr_enabled: Optional[bool] = None,
+            twitter_social_link: Optional[Union[ExperienceSocialLink, bool]] = None,
+            youtube_social_link: Optional[Union[ExperienceSocialLink, bool]] = None,
+            twitch_social_link: Optional[Union[ExperienceSocialLink, bool]] = None,
+            discord_social_link: Optional[Union[ExperienceSocialLink, bool]] = None,
+            group_social_link: Optional[Union[ExperienceSocialLink, bool]] = None,
+            guilded_social_link: Optional[Union[ExperienceSocialLink, bool]] = None):
+
+        new_experience, field_mask = {}, []
+
+        if voice_chat_enabled != None:
+            new_experience["voiceChatEnabled"] = voice_chat_enabled
+            field_mask.append("voiceChatEnabled")
+
+        if private_server_robux_price != None:
+            if private_server_robux_price == True:
+                raise ValueError("private_server_robux_price should be either int or False.")
+
+            if type(private_server_robux_price) == int:
+                new_experience["privateServerPriceRobux"] = private_server_robux_price
+            
+            field_mask.append("privateServerPriceRobux")
+
+        for platform, value in {
+            "twitter": twitter_social_link,
+            "youtube": youtube_social_link,
+            "twitch": twitch_social_link,
+            "discord": discord_social_link,
+            "robloxGroup": group_social_link,
+            "guilded": guilded_social_link
+        }.items():
+            if value != None:
+                if value == True:
+                    raise ValueError(f"{platform}_social_link should be either ExperienceSocialLink or False.")
+
+                if type(value) == ExperienceSocialLink:
+                    new_experience[f"{platform}SocialLink"] = {
+                        "title": value.title,
+                        "uri": value.uri
+                    }
+                    field_mask.append(f"{platform}SocialLink.title")
+                    field_mask.append(f"{platform}SocialLink.uri")
+                else:
+                    field_mask.append(f"{platform}SocialLink")
+
+        for platform, value in {
+            "desktop": desktop_enabled,
+            "mobile": mobile_enabled,
+            "tablet": tablet_enabled,
+            "console": console_enabled,
+            "vr": vr_enabled
+        }.items():
+            if value != None:
+                new_experience[f"{platform}Enabled"] = value
+                field_mask.append(f"{platform}Enabled")
+        
+        print("[DEBUG]", new_experience, field_mask)
+
+        response = request_session.patch(f"https://apis.roblox.com/cloud/v2/universes/{self.id}",
+            headers={"x-api-key" if not self.__api_key.startswith("Bearer ") else "authorization": self.__api_key, "user-agent": user_agent},
+            json=new_experience, params={"updateMask": ",".join(field_mask)})
+        
+        print("[DEBUG]", response.status_code, response.text)
+        self.__update_params(response.json())
+                
+        # if response.status_code == 401: raise InvalidKey(response.text)
+        # elif response.status_code == 404: raise NotFound(response.json()['message'])
+        # elif response.status_code == 429: raise RateLimited("You're being rate limited!")
+        # elif response.status_code >= 500: raise ServiceUnavailable(f"Internal Server Error: '{response.text}'")
+        # elif not response.ok: raise rblx_opencloudException(f"Unexpected HTTP {response.status_code}: '{response.text}'")
+        
     
     def get_data_store(self, name: str, scope: Optional[str]="global") -> DataStore:
         """
